@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	mapTimeout = 10 * time.Second
+	mapTimeout = 10 * time.Minute
 )
 
 func main() {

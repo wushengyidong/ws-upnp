@@ -4,10 +4,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 )
@@ -15,6 +12,7 @@ import (
 const (
 	maxRefreshRetries = 5
 	configFilePath    = "config.yml"
+	mapTimeout        = 30 * time.Minute
 )
 
 var successMapPort = 0
@@ -22,7 +20,8 @@ var successMapPort = 0
 func makeUPNPListener(intPort int, extPort int, nat NAT) error {
 
 	desc := nat.(*upnpNAT).ourIP + "_TCP_" + strconv.Itoa(intPort)
-	port, err := nat.AddPortMapping("tcp", extPort, intPort, desc, 0)
+	lifetime := mapTimeout.Seconds()
+	port, err := nat.AddPortMapping("tcp", extPort, intPort, desc, int(lifetime))
 	if err != nil {
 		return errors.New(fmt.Sprintf("Port mapping error: %v", err))
 	}
@@ -79,13 +78,6 @@ func RetryMapPort() {
 
 	if err != nil {
 		log.Errorf("Port mapping all failed from external port %d to internal port %d with %s", extPort, intPort, err)
-		if successMapPort != 0 && nat != nil {
-			err := nat.DeletePortMapping("TCP", extPort, successMapPort)
-			if err != nil {
-				log.WithField("error", err).Error("Port mapping delete error")
-				return
-			}
-		}
 
 		rand.Seed(time.Now().UnixNano())
 		intPort = rand.Intn(55001) + 10000
@@ -101,62 +93,21 @@ func getCachePort() (int, error) {
 			return 0, err
 		}
 
-		writeCachePort(path, 0)
+		writeErr := writeCachePort(path, 0)
+		if writeErr != nil {
+			return 0, writeErr
+		}
 	}
 
-	p := readCachePort(path)
+	p, readErr := readCachePort(path)
+
+	if readErr != nil {
+		return 0, readErr
+	}
 
 	if p == 0 {
 		return successMapPort, nil
 	}
 
 	return p, nil
-}
-
-type CacheMapPort struct {
-	Port int `yaml:"Port"`
-}
-
-func writeCachePort(src string, port int) {
-	c := &CacheMapPort{
-		Port: port,
-	}
-	data, err := yaml.Marshal(c)
-	checkError(err)
-	err = ioutil.WriteFile(src, data, 0777)
-	checkError(err)
-}
-
-func readCachePort(src string) int {
-	content, err := ioutil.ReadFile(src)
-	checkError(err)
-	c := &CacheMapPort{}
-	err = yaml.Unmarshal(content, &c)
-	checkError(err)
-	return c.Port
-}
-
-func createCacheFile(src string) error {
-	_, err := os.Create(src)
-	if err != nil {
-		return errors.New(fmt.Sprintf("Create file error: %v", err))
-	}
-	return nil
-}
-
-func checkError(err error) {
-	if err != nil {
-		panic(err)
-	}
-}
-
-func Exists(path string) bool {
-	_, err := os.Stat(path) //os.Stat获取文件信息
-	if err != nil {
-		if os.IsExist(err) {
-			return true
-		}
-		return false
-	}
-	return true
 }

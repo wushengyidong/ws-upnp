@@ -11,14 +11,13 @@ import (
 
 const (
 	maxRefreshRetries = 5
-	configFilePath    = "config.yml"
+	configFilePath    = ".config.yml"
 	mapTimeout        = 30 * time.Minute
 )
 
 var successMapPort = 0
 
 func makeUPNPListener(intPort int, extPort int, nat NAT) error {
-
 	desc := nat.(*upnpNAT).ourIP + "_TCP_" + strconv.Itoa(intPort)
 	lifetime := mapTimeout.Seconds()
 	port, err := nat.AddPortMapping("tcp", extPort, intPort, desc, int(lifetime))
@@ -44,9 +43,9 @@ func RetryMapPort() {
 		return
 	}
 
-	cachePort, cerr := getCachePort()
-	if cerr != nil {
-		log.Errorf("Create config file failed: %v", cerr)
+	cachePort, cacheErr := getCachePort()
+	if cacheErr != nil {
+		log.Errorf("Create config file failed: %v", cacheErr)
 		return
 	}
 
